@@ -1,0 +1,13 @@
+[package]
+name = "renderer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+ash = "0.38"
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
