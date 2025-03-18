@@ -1,19 +1,24 @@
+#![feature(let_chains)]
+
 mod context;
 
 use context::Context;
+use raw_window_handle::HasWindowHandle;
 
 pub struct Renderer {
     _context: Context,
 }
 
 impl Renderer {
-    pub fn new() -> Result<Self, RendererCreateError> {
-        let context = Context::new()?;
+    pub fn new(window: &impl HasWindowHandle) -> Result<Self, RendererError> {
+        let context = Context::new(window)?;
 
         Ok(Self { _context: context })
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("failed to create Renderer")]
-pub struct RendererCreateError(#[from] context::ContextCreateError);
+pub enum RendererError {
+    #[error("context / {0}")]
+    Context(#[from] context::ContextError),
+}

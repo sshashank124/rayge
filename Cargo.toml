@@ -19,6 +19,7 @@ pedantic = "warn"
 perf = "warn"
 nursery = "warn"
 suspicious = "warn"
+cast_possible_truncation = { level = "allow", priority = 1 }
 missing_errors_doc = { level = "allow", priority = 1 }
 
 [profile.release]

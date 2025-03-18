@@ -5,9 +5,11 @@ use winit::event_loop::EventLoop;
 
 use app::App;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let event_loop = EventLoop::new()?;
+fn main() -> () {
+    let event_loop = EventLoop::new().expect("failed to create event loop");
     let mut app = App::new();
-    event_loop.run_app(&mut app)?;
-    app.close()
+    event_loop.run_app(&mut app).expect("failed to run app");
+    if let Err(e) = app.close() {
+        eprintln!("error occured while running: {e}");
+    }
 }

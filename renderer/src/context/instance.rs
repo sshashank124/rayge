@@ -1,19 +1,23 @@
+use std::ops::Deref;
+
 use ash::{Entry, vk};
 
 use super::extensions;
 
-mod conf {
-    pub(super) const APPLICATION_NAME: &std::ffi::CStr = c"RAYGE Renderer";
-    pub(super) const VK_API_VERSION: u32 = ash::vk::API_VERSION_1_3;
+pub mod conf {
+    pub const APPLICATION_NAME: &std::ffi::CStr = c"RAYGE Renderer";
+    pub const VK_API_VERSION: u32 = ash::vk::API_VERSION_1_3;
 }
 
-pub(super) struct Instance {
+type Result<T> = core::result::Result<T, InstanceError>;
+
+pub struct Instance {
     instance: ash::Instance,
-    _entry: Entry,
+    pub entry: Entry,
 }
 
 impl Instance {
-    pub(super) fn new() -> Result<Self, InstanceCreateError> {
+    pub fn new() -> Result<Self> {
         let entry = unsafe { Entry::load()? };
 
         let instance = {
@@ -26,13 +30,14 @@ impl Instance {
                 .enabled_extension_names(extensions::instance::REQUIRED)
                 .flags(extensions::instance::FLAGS);
 
-            unsafe { entry.create_instance(&create_info, None)? }
+            unsafe {
+                entry
+                    .create_instance(&create_info, None)
+                    .map_err(InstanceError::Create)?
+            }
         };
 
-        Ok(Self {
-            instance,
-            _entry: entry,
-        })
+        Ok(Self { instance, entry })
     }
 }
 
@@ -44,10 +49,17 @@ impl Drop for Instance {
     }
 }
 
+impl Deref for Instance {
+    type Target = ash::Instance;
+    fn deref(&self) -> &Self::Target {
+        &self.instance
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
-pub enum InstanceCreateError {
-    #[error("failed to load Vulkan entry-point")]
+pub enum InstanceError {
+    #[error("failed to load vulkan entry-point / {0}")]
     LoadEntry(#[from] ash::LoadingError),
-    #[error("failed to create Vulkan instance")]
-    Create(#[from] vk::Result),
+    #[error("failed to create vulkan instance / {0}")]
+    Create(vk::Result),
 }

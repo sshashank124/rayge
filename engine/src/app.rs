@@ -2,7 +2,7 @@ use std::error::Error;
 
 use winit::{
     application::ApplicationHandler,
-    dpi::PhysicalSize,
+    dpi::LogicalSize,
     event::{ElementState, KeyEvent, StartCause, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow},
     keyboard::{Key, NamedKey, PhysicalKey},
@@ -22,19 +22,22 @@ mod conf {
 pub struct App {
     // state
     inputs: input::State,
-    needs_resizing: bool,
     error: Option<Box<dyn Error>>,
-    // renderer
-    renderer: Option<Renderer>,
-    // window
+    // graphics
     window_attributes: WindowAttributes,
-    window: Option<Window>,
+    graphics: Option<Graphics>,
+}
+
+struct Graphics {
+    renderer: Renderer,
+    needs_resizing: bool,
+    window: Window,
 }
 
 impl App {
     pub fn new() -> Self {
         let window_attributes = Window::default_attributes()
-            .with_inner_size(PhysicalSize::<u32>::from(conf::FRAME_RESOLUTION))
+            .with_inner_size(LogicalSize::<u32>::from(conf::FRAME_RESOLUTION))
             .with_title(conf::WINDOW_TITLE);
 
         Self {
@@ -54,24 +57,30 @@ impl ApplicationHandler for App {
         if cause == StartCause::Init {
             event_loop.set_control_flow(ControlFlow::Poll);
 
-            self.window = match event_loop.create_window(self.window_attributes.clone()) {
-                Err(e) => {
-                    self.error = Some(e.into());
-                    event_loop.exit();
-                    return;
-                }
-                Ok(window) => {
-                    self.renderer = match Renderer::new() {
-                        Err(e) => {
-                            self.error = Some(e.into());
-                            event_loop.exit();
-                            return;
+            self.graphics = Some(
+                match event_loop.create_window(self.window_attributes.clone()) {
+                    Err(e) => {
+                        self.error = Some(e.into());
+                        event_loop.exit();
+                        return;
+                    }
+                    Ok(window) => {
+                        let renderer = match Renderer::new(&window) {
+                            Err(e) => {
+                                self.error = Some(e.into());
+                                event_loop.exit();
+                                return;
+                            }
+                            Ok(renderer) => renderer,
+                        };
+                        Graphics {
+                            renderer,
+                            needs_resizing: false,
+                            window,
                         }
-                        Ok(renderer) => Some(renderer),
-                    };
-                    Some(window)
-                }
-            };
+                    }
+                },
+            );
         }
     }
 
@@ -86,7 +95,9 @@ impl ApplicationHandler for App {
         match event {
             // WindowEvent::RedrawRequested => self.render(),
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                self.needs_resizing = true;
+                if let Some(graphics) = &mut self.graphics {
+                    graphics.needs_resizing = true;
+                }
             }
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
