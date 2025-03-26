@@ -14,9 +14,9 @@ type Result<T> = core::result::Result<T, DeviceError>;
 
 pub struct Device {
     queues: Queues,
-    ext: extensions::Handles,
+    pub ext: extensions::Handles,
     allocator: ManuallyDrop<vk_mem::Allocator>,
-    device: ash::Device,
+    handle: ash::Device,
 }
 
 impl Device {
@@ -28,7 +28,7 @@ impl Device {
         let (queue_create_infos, queue_families) =
             Queues::create_infos(instance, physical_device, surface)?;
 
-        let device = {
+        let handle = {
             let (required_features, mut additional_required_features) = features::required();
             let mut required_features = additional_required_features
                 .iter_mut()
@@ -55,7 +55,7 @@ impl Device {
 
         let allocator = {
             let mut create_info =
-                vk_mem::AllocatorCreateInfo::new(instance, &device, **physical_device);
+                vk_mem::AllocatorCreateInfo::new(instance, &handle, **physical_device);
             create_info.vulkan_api_version = instance::conf::VK_API_VERSION;
             create_info.flags = vk_mem::AllocatorCreateFlags::KHR_DEDICATED_ALLOCATION
                 | vk_mem::AllocatorCreateFlags::KHR_BIND_MEMORY2
@@ -67,15 +67,15 @@ impl Device {
             }?)
         };
 
-        let ext = extensions::Handles::new(instance, &device);
+        let ext = extensions::Handles::new(instance, &handle);
 
-        let queues = Queues::new(&device, &queue_families);
+        let queues = Queues::new(&handle, &queue_families);
 
         Ok(Self {
             queues,
             ext,
             allocator,
-            device,
+            handle,
         })
     }
 }
@@ -84,8 +84,16 @@ impl Drop for Device {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.allocator);
-            self.device.destroy_device(None);
+            self.handle.destroy_device(None);
         }
+    }
+}
+
+impl core::fmt::Debug for Device {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Device")
+            .field("queues", &self.queues)
+            .finish_non_exhaustive()
     }
 }
 

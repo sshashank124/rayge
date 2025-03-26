@@ -11,6 +11,7 @@ repository = "https://github.com/sshashank124/rayge"
 [workspace.dependencies]
 renderer = { path = "renderer" }
 thiserror = "2"
+tracing = "0.1"
 
 [workspace.lints.clippy]
 all = "warn"

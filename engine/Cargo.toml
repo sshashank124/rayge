@@ -7,6 +7,8 @@ repository.workspace = true
 
 [dependencies]
 renderer = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = "0.3"
 winit = "0.30"
 
 [lints]

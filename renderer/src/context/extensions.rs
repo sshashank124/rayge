@@ -6,6 +6,7 @@ pub mod instance {
     use ash::{ext, khr, vk};
 
     pub const REQUIRED: &[*const std::ffi::c_char] = &[
+        // Core
         khr::portability_enumeration::NAME.as_ptr(),
         // Surface
         ext::metal_surface::NAME.as_ptr(),
@@ -28,6 +29,8 @@ pub mod device {
     // TODO: split into required and optional extensions
     pub const REQUIRED: &[&ffi::CStr] = &[
         // Core
+        khr::portability_subset::NAME,
+        // Surface
         khr::swapchain::NAME,
         // Acceleration Structure
         // khr::acceleration_structure::NAME,
@@ -65,7 +68,7 @@ pub mod device {
 }
 
 pub struct Handles {
-    swapchain: khr::swapchain::Device,
+    pub swapchain: khr::swapchain::Device,
 }
 
 impl Handles {

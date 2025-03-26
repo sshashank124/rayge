@@ -10,6 +10,7 @@ use super::{
 
 type Result<T> = core::result::Result<T, QueueError>;
 
+#[derive(Debug)]
 pub struct Queues {
     graphics: Queue,
     compute: Queue,
@@ -17,8 +18,9 @@ pub struct Queues {
 }
 
 pub struct Queue {
-    queue: vk::Queue,
     family: u32,
+    index: u32,
+    handle: vk::Queue,
 }
 
 pub struct Families {
@@ -70,9 +72,13 @@ impl Queues {
 
 impl Queue {
     fn new(device: &ash::Device, family: u32, index: u32) -> Self {
-        let queue = unsafe { device.get_device_queue(family, index) };
+        let handle = unsafe { device.get_device_queue(family, index) };
 
-        Self { queue, family }
+        Self {
+            family,
+            index,
+            handle,
+        }
     }
 }
 
@@ -144,6 +150,15 @@ impl TryFrom<FamiliesInfo> for Families {
             compute: value.compute.ok_or("compute")?,
             transfer: value.transfer.ok_or("compute")?,
         })
+    }
+}
+
+impl core::fmt::Debug for Queue {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Queue")
+            .field("family", &self.family)
+            .field("index", &self.index)
+            .finish_non_exhaustive()
     }
 }
 

@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use ash::{ext, khr, vk};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use raw_window_metal::Layer;
@@ -20,20 +18,21 @@ mod conf {
 type Result<T> = core::result::Result<T, SurfaceError>;
 
 pub struct Surface {
-    config: Config,
+    pub config: Config,
     handle: Handle,
 }
 
-pub struct Handle {
-    surface: vk::SurfaceKHR,
-    loader: khr::surface::Instance,
-}
-
+#[derive(Debug)]
 pub struct Config {
     pub surface_format: vk::SurfaceFormatKHR,
     pub present_mode: vk::PresentModeKHR,
     pub extent: vk::Extent2D,
     pub image_count: u32,
+}
+
+pub struct Handle {
+    surface: vk::SurfaceKHR,
+    loader: khr::surface::Instance,
 }
 
 impl Surface {
@@ -179,10 +178,17 @@ fn create_surface(instance: &Instance, window: &impl HasWindowHandle) -> Result<
     }
 }
 
-impl Deref for Surface {
+impl std::ops::Deref for Surface {
     type Target = Handle;
     fn deref(&self) -> &Self::Target {
         &self.handle
+    }
+}
+
+impl std::ops::Deref for Handle {
+    type Target = vk::SurfaceKHR;
+    fn deref(&self) -> &Self::Target {
+        &self.surface
     }
 }
 
@@ -191,6 +197,14 @@ impl Drop for Handle {
         unsafe {
             self.loader.destroy_surface(self.surface, None);
         }
+    }
+}
+
+impl core::fmt::Debug for Surface {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Surface")
+            .field("config", &self.config)
+            .finish_non_exhaustive()
     }
 }
 

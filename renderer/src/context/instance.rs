@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use ash::{Entry, vk};
 
 use super::extensions;
@@ -49,7 +47,7 @@ impl Drop for Instance {
     }
 }
 
-impl Deref for Instance {
+impl std::ops::Deref for Instance {
     type Target = ash::Instance;
     fn deref(&self) -> &Self::Target {
         &self.instance

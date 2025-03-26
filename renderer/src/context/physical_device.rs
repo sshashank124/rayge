@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use ash::vk;
 
 use super::{extensions, features, instance::Instance, properties::Properties, surface};
@@ -7,8 +5,8 @@ use super::{extensions, features, instance::Instance, properties::Properties, su
 type Result<T> = core::result::Result<T, PhysicalDeviceError>;
 
 pub struct PhysicalDevice {
-    physical_device: vk::PhysicalDevice,
     properties: Properties,
+    handle: vk::PhysicalDevice,
 }
 
 impl PhysicalDevice {
@@ -27,17 +25,17 @@ impl PhysicalDevice {
 
     fn try_create(
         instance: &Instance,
-        physical_device: vk::PhysicalDevice,
+        handle: vk::PhysicalDevice,
         surface: &surface::Handle,
     ) -> Result<Option<(Self, surface::Config)>> {
         Ok(
-            if extensions::device::supported_by(instance, physical_device)?
-                && features::supported_by(instance, physical_device)
-                && let Some(surface_config) = surface.get_config(physical_device)?
+            if extensions::device::supported_by(instance, handle)?
+                && features::supported_by(instance, handle)
+                && let Some(surface_config) = surface.get_config(handle)?
             {
                 let physical_device = Self {
-                    physical_device,
-                    properties: Properties::get_supported(instance, physical_device),
+                    properties: Properties::get_supported(instance, handle),
+                    handle,
                 };
                 Some((physical_device, surface_config))
             } else {
@@ -47,10 +45,18 @@ impl PhysicalDevice {
     }
 }
 
-impl Deref for PhysicalDevice {
+impl std::ops::Deref for PhysicalDevice {
     type Target = vk::PhysicalDevice;
     fn deref(&self) -> &Self::Target {
-        &self.physical_device
+        &self.handle
+    }
+}
+
+impl core::fmt::Debug for PhysicalDevice {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PhysicalDevice")
+            .field("properties", &self.properties)
+            .finish_non_exhaustive()
     }
 }
 

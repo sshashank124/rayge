@@ -7,18 +7,18 @@ mod properties;
 mod queue;
 mod surface;
 
-use device::Device;
-use physical_device::PhysicalDevice;
 use raw_window_handle::HasWindowHandle;
 
+use device::Device;
 use instance::Instance;
+use physical_device::PhysicalDevice;
 use surface::Surface;
 
 type Result<T> = core::result::Result<T, ContextError>;
 
 pub struct Context {
     device: Device,
-    surface: Surface,
+    pub surface: Surface,
     physical_device: PhysicalDevice,
     instance: Instance,
 }
@@ -35,12 +35,33 @@ impl Context {
 
         let device = Device::new(&instance, &physical_device, &surface)?;
 
-        Ok(Self {
+        let context = Self {
             device,
             surface,
             physical_device,
             instance,
-        })
+        };
+
+        tracing::debug!("Context initialized: {context:?}");
+
+        Ok(context)
+    }
+}
+
+impl std::ops::Deref for Context {
+    type Target = Device;
+    fn deref(&self) -> &Self::Target {
+        &self.device
+    }
+}
+
+impl core::fmt::Debug for Context {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Context")
+            .field("device", &self.device)
+            .field("surface", &self.surface)
+            .field("physical_device", &self.physical_device)
+            .finish_non_exhaustive()
     }
 }
 

@@ -1,19 +1,29 @@
 #![feature(let_chains)]
 
 mod context;
+mod swapchain;
 
-use context::Context;
+use std::rc::Rc;
+
 use raw_window_handle::HasWindowHandle;
 
+use context::Context;
+use swapchain::Swapchain;
+
+type Ctx = Rc<Context>;
+
 pub struct Renderer {
-    _context: Context,
+    swapchain: Swapchain,
+    context: Ctx,
 }
 
 impl Renderer {
     pub fn new(window: &impl HasWindowHandle) -> Result<Self, RendererError> {
-        let context = Context::new(window)?;
+        let context = Rc::new(Context::new(window)?);
 
-        Ok(Self { _context: context })
+        let swapchain = Swapchain::new(&context)?;
+
+        Ok(Self { swapchain, context })
     }
 }
 
@@ -21,4 +31,6 @@ impl Renderer {
 pub enum RendererError {
     #[error("context / {0}")]
     Context(#[from] context::ContextError),
+    #[error("swapchain / {0}")]
+    Swapchain(#[from] swapchain::SwapchainError),
 }
