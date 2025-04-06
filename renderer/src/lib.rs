@@ -11,10 +11,11 @@ mod context;
 mod destroy;
 mod swapchain;
 
-type Result<T> = core::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 pub struct Renderer {
     swapchain: swapchain::Swapchain,
+    needs_resizing: bool,
     ctx: context::Context,
 }
 
@@ -23,19 +24,31 @@ impl Renderer {
         let ctx = context::Context::new(window)?;
         let swapchain = swapchain::Swapchain::new(&ctx)?;
 
-        Ok(Self { swapchain, ctx })
+        Ok(Self {
+            swapchain,
+            needs_resizing: false,
+            ctx,
+        })
     }
 
-    pub fn render(&mut self) -> Result<bool> {
-        Ok(false)
+    pub fn render(&mut self) -> Result<()> {
+        if self.needs_resizing && !self.resize()? {
+            return Ok(());
+        }
+        Ok(())
     }
 
-    pub fn resize(&mut self) -> Result<bool> {
+    pub const fn needs_resizing(&mut self) {
+        self.needs_resizing = true;
+    }
+
+    fn resize(&mut self) -> Result<bool> {
         let is_valid = self.ctx.refresh_surface_capabilities()?;
         if is_valid {
             self.ctx.wait_idle()?;
             self.swapchain.destroy_with(&self.ctx);
             self.swapchain = Swapchain::new(&self.ctx)?;
+            self.needs_resizing = false;
         }
         Ok(is_valid)
     }
@@ -45,7 +58,11 @@ impl Drop for Renderer {
     fn drop(&mut self) {
         use destroy::Destroy;
 
-        let Self { swapchain, ctx } = self;
+        let Self {
+            swapchain,
+            needs_resizing: _,
+            ctx,
+        } = self;
 
         ctx.wait_idle().expect("Failed to wait for device to idle");
         swapchain.destroy_with(ctx);

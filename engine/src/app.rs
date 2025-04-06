@@ -9,19 +9,19 @@ use winit::{
     event::{ElementState, KeyEvent, StartCause, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow},
     keyboard::{Key, NamedKey, PhysicalKey},
-    window::{Window, WindowAttributes, WindowId},
+    window::{Window, WindowId},
 };
 
 use renderer::Renderer;
 
 use crate::{
     input,
-    time_stepper::{TimeStepInfo, TimeStepper},
+    time_stepper::{self, TimeStepper},
 };
 
 mod conf {
     pub const WINDOW_TITLE: &str = "RAYGE Engine";
-    pub const FRAME_RESOLUTION: (u32, u32) = (640, 480);
+    pub const WINDOW_SIZE: (u32, u32) = (640, 480);
 
     pub const UPDATE_FREQUENCY: u64 = 100;
     pub const TARGET_FPS: u64 = 60;
@@ -30,33 +30,26 @@ mod conf {
 pub struct App {
     inputs: input::State,
     // state
-    stepper: TimeStepper<{ conf::UPDATE_FREQUENCY }>,
+    state_stepper: TimeStepper<{ time_stepper::frequency_to_micros(conf::UPDATE_FREQUENCY) }>,
     graphics: Option<Graphics>,
     previous_time: Instant,
     // app
-    window_attributes: WindowAttributes,
     error: Option<Box<dyn Error>>,
 }
 
 struct Graphics {
-    stepper: TimeStepper<{ conf::TARGET_FPS }>,
     renderer: Renderer,
-    needs_resizing: bool,
-    window: Window,
+    stepper: TimeStepper<{ time_stepper::frequency_to_micros(conf::TARGET_FPS) }, { u64::MAX }>,
+    _window: Window,
 }
 
 impl App {
     pub fn new() -> Self {
-        let window_attributes = Window::default_attributes()
-            .with_inner_size(LogicalSize::<u32>::from(conf::FRAME_RESOLUTION))
-            .with_title(conf::WINDOW_TITLE);
-
         Self {
             inputs: input::State::default(),
-            stepper: TimeStepper::default(),
+            state_stepper: TimeStepper::default(),
             graphics: None,
             previous_time: Instant::now(),
-            window_attributes,
             error: None,
         }
     }
@@ -70,8 +63,8 @@ impl App {
         let delta_time = now.duration_since(self.previous_time);
         self.previous_time = now;
 
-        self.stepper += delta_time;
-        for TimeStepInfo { now: _, delta: _ } in &mut self.stepper {
+        self.state_stepper += delta_time;
+        for _ in &mut self.state_stepper {
             // update state
         }
 
@@ -86,20 +79,16 @@ impl App {
 impl Graphics {
     fn new(renderer: Renderer, window: Window) -> Self {
         Self {
-            stepper: TimeStepper::default(),
             renderer,
-            needs_resizing: false,
-            window,
+            stepper: TimeStepper::default(),
+            _window: window,
         }
     }
 
-    fn update(&mut self, delta_time: Duration) -> Result<(), renderer::Error> {
+    fn update(&mut self, delta_time: Duration) -> renderer::Result<()> {
         self.stepper += delta_time;
-        if !self.needs_resizing || self.renderer.resize()? {
-            self.needs_resizing = false;
-            for TimeStepInfo { now: _, delta: _ } in &mut self.stepper {
-                self.needs_resizing = self.renderer.render()?;
-            }
+        for _ in &mut self.stepper {
+            self.renderer.render()?;
         }
         Ok(())
     }
@@ -110,26 +99,25 @@ impl ApplicationHandler for App {
         if cause == StartCause::Init {
             event_loop.set_control_flow(ControlFlow::Poll);
 
-            self.graphics = Some(
-                match event_loop.create_window(self.window_attributes.clone()) {
+            let window_attributes = Window::default_attributes()
+                .with_inner_size(LogicalSize::<u32>::from(conf::WINDOW_SIZE))
+                .with_title(conf::WINDOW_TITLE);
+
+            self.graphics = Some(match event_loop.create_window(window_attributes) {
+                Err(e) => {
+                    self.error = Some(e.into());
+                    event_loop.exit();
+                    return;
+                }
+                Ok(window) => match Renderer::new(&window) {
                     Err(e) => {
                         self.error = Some(e.into());
                         event_loop.exit();
                         return;
                     }
-                    Ok(window) => {
-                        let renderer = match Renderer::new(&window) {
-                            Err(e) => {
-                                self.error = Some(e.into());
-                                event_loop.exit();
-                                return;
-                            }
-                            Ok(renderer) => renderer,
-                        };
-                        Graphics::new(renderer, window)
-                    }
+                    Ok(renderer) => Graphics::new(renderer, window),
                 },
-            );
+            });
         }
     }
 
@@ -151,7 +139,7 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                 if let Some(graphics) = &mut self.graphics {
-                    graphics.needs_resizing = true;
+                    graphics.renderer.needs_resizing();
                 }
             }
             WindowEvent::CloseRequested

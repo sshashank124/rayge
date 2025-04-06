@@ -4,7 +4,7 @@ mod time_stepper;
 
 use tracing::Level;
 use tracing_subscriber::{FmtSubscriber, fmt::format::FmtSpan};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
 
 use app::App;
 
@@ -17,7 +17,6 @@ fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("failed to set default subscriber");
 
     let event_loop = EventLoop::new().expect("failed to create event loop");
-    event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App::new();
     event_loop.run_app(&mut app).expect("failed to run app");
     if let Err(e) = app.close() {

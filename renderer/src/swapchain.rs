@@ -73,6 +73,18 @@ impl Swapchain {
             handle,
         })
     }
+
+    pub fn get_next_image(self, ctx: &Context, signal_to: vk::Semaphore) -> Result<u32> {
+        match unsafe {
+            ctx.ext
+                .swapchain
+                .acquire_next_image(self.handle, u64::MAX, signal_to, vk::Fence::null())
+                .map_err(Error::AcquireNextImage)?
+        } {
+            (_, true) => Err(Error::NeedsRecreating),
+            (image_index, false) => Ok(image_index),
+        }
+    }
 }
 
 impl Destroy<Context> for Swapchain {
@@ -98,6 +110,10 @@ pub enum Error {
     Create(vk::Result),
     #[error("failed to get swapchain images / {0}")]
     GetSwapchainImages(vk::Result),
+    #[error("failed to acquire next image / {0}")]
+    AcquireNextImage(vk::Result),
+    #[error("needs recreating")]
+    NeedsRecreating,
     #[error("image / {0}")]
     Image(#[from] image::Error),
     #[error("sync states / {0}")]

@@ -15,7 +15,7 @@ pub struct Context {
     device: device::Device,
     pub surface: surface::Surface,
     physical_device: physical_device::PhysicalDevice,
-    instance: instance::Instance,
+    _instance: instance::Instance,
 }
 
 impl Context {
@@ -35,7 +35,7 @@ impl Context {
             device,
             surface,
             physical_device,
-            instance,
+            _instance: instance,
         };
 
         tracing::debug!("Context initialized: {context:?}");
@@ -61,7 +61,7 @@ impl core::fmt::Debug for Context {
             device,
             surface,
             physical_device,
-            instance: _,
+            _instance: _,
         } = self;
         f.debug_struct("Context")
             .field("device", device)
