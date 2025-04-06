@@ -2,13 +2,9 @@ use std::collections::HashSet;
 
 use ash::vk;
 
-use super::{
-    instance::Instance,
-    physical_device::PhysicalDevice,
-    surface::{Surface, SurfaceError},
-};
+use super::{instance::Instance, physical_device::PhysicalDevice, surface};
 
-type Result<T> = core::result::Result<T, QueueError>;
+type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Queues {
@@ -52,7 +48,7 @@ impl Queues {
     pub fn create_infos(
         instance: &Instance,
         physical_device: &PhysicalDevice,
-        surface: &Surface,
+        surface: &surface::Surface,
     ) -> Result<(Vec<vk::DeviceQueueCreateInfo<'static>>, Families)> {
         let families = Families::create_infos(instance, physical_device, surface)?;
 
@@ -86,7 +82,7 @@ impl Families {
     pub fn create_infos(
         instance: &Instance,
         physical_device: &PhysicalDevice,
-        surface: &Surface,
+        surface: &surface::Surface,
     ) -> Result<Self> {
         let family_props =
             unsafe { instance.get_physical_device_queue_family_properties(**physical_device) }
@@ -128,7 +124,7 @@ impl Families {
             }
         }
 
-        Self::try_from(found_indices).map_err(QueueError::Create)
+        Self::try_from(found_indices).map_err(Error::Create)
     }
 
     fn unique(&self) -> HashSet<u32> {
@@ -155,17 +151,22 @@ impl TryFrom<FamiliesInfo> for Families {
 
 impl core::fmt::Debug for Queue {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self {
+            family,
+            index,
+            handle: _,
+        } = self;
         f.debug_struct("Queue")
-            .field("family", &self.family)
-            .field("index", &self.index)
+            .field("family", family)
+            .field("index", index)
             .finish_non_exhaustive()
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum QueueError {
+pub enum Error {
     #[error("failed to create {0} queue")]
     Create(String),
     #[error("surface error / {0}")]
-    Surface(#[from] SurfaceError),
+    Surface(#[from] surface::Error),
 }

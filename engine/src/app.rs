@@ -1,4 +1,7 @@
-use std::error::Error;
+use std::{
+    error::Error,
+    time::{Duration, Instant},
+};
 
 use winit::{
     application::ApplicationHandler,
@@ -11,24 +14,32 @@ use winit::{
 
 use renderer::Renderer;
 
-use crate::input;
+use crate::{
+    input,
+    time_stepper::{TimeStepInfo, TimeStepper},
+};
 
 mod conf {
-    pub const WINDOW_TITLE: &str = "Engine";
+    pub const WINDOW_TITLE: &str = "RAYGE Engine";
     pub const FRAME_RESOLUTION: (u32, u32) = (640, 480);
+
+    pub const UPDATE_FREQUENCY: u64 = 100;
+    pub const TARGET_FPS: u64 = 60;
 }
 
-#[derive(Default)]
 pub struct App {
-    // state
     inputs: input::State,
-    error: Option<Box<dyn Error>>,
-    // graphics
-    window_attributes: WindowAttributes,
+    // state
+    stepper: TimeStepper<{ conf::UPDATE_FREQUENCY }>,
     graphics: Option<Graphics>,
+    previous_time: Instant,
+    // app
+    window_attributes: WindowAttributes,
+    error: Option<Box<dyn Error>>,
 }
 
 struct Graphics {
+    stepper: TimeStepper<{ conf::TARGET_FPS }>,
     renderer: Renderer,
     needs_resizing: bool,
     window: Window,
@@ -41,15 +52,57 @@ impl App {
             .with_title(conf::WINDOW_TITLE);
 
         Self {
+            inputs: input::State::default(),
+            stepper: TimeStepper::default(),
+            graphics: None,
+            previous_time: Instant::now(),
             window_attributes,
-            ..Default::default()
+            error: None,
         }
     }
 
     pub fn close(self) -> Result<(), Box<dyn Error>> {
         self.error.map_or(Ok(()), Err)
     }
-    // fn render(&mut self) {}
+
+    fn update(&mut self) -> Result<(), Box<dyn Error>> {
+        let now = Instant::now();
+        let delta_time = now.duration_since(self.previous_time);
+        self.previous_time = now;
+
+        self.stepper += delta_time;
+        for TimeStepInfo { now: _, delta: _ } in &mut self.stepper {
+            // update state
+        }
+
+        if let Some(graphics) = &mut self.graphics {
+            graphics.update(delta_time)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Graphics {
+    fn new(renderer: Renderer, window: Window) -> Self {
+        Self {
+            stepper: TimeStepper::default(),
+            renderer,
+            needs_resizing: false,
+            window,
+        }
+    }
+
+    fn update(&mut self, delta_time: Duration) -> Result<(), renderer::Error> {
+        self.stepper += delta_time;
+        if !self.needs_resizing || self.renderer.resize()? {
+            self.needs_resizing = false;
+            for TimeStepInfo { now: _, delta: _ } in &mut self.stepper {
+                self.needs_resizing = self.renderer.render()?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl ApplicationHandler for App {
@@ -73,11 +126,7 @@ impl ApplicationHandler for App {
                             }
                             Ok(renderer) => renderer,
                         };
-                        Graphics {
-                            renderer,
-                            needs_resizing: false,
-                            window,
-                        }
+                        Graphics::new(renderer, window)
                     }
                 },
             );
@@ -86,6 +135,13 @@ impl ApplicationHandler for App {
 
     fn resumed(&mut self, _: &ActiveEventLoop) {}
 
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if let Err(e) = self.update() {
+            self.error = Some(e);
+            event_loop.exit();
+        }
+    }
+
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -93,7 +149,6 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         match event {
-            // WindowEvent::RedrawRequested => self.render(),
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                 if let Some(graphics) = &mut self.graphics {
                     graphics.needs_resizing = true;

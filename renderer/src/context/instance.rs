@@ -7,7 +7,7 @@ pub mod conf {
     pub const VK_API_VERSION: u32 = ash::vk::API_VERSION_1_3;
 }
 
-type Result<T> = core::result::Result<T, InstanceError>;
+type Result<T> = core::result::Result<T, Error>;
 
 pub struct Instance {
     instance: ash::Instance,
@@ -25,13 +25,12 @@ impl Instance {
 
             let create_info = vk::InstanceCreateInfo::default()
                 .application_info(&app_info)
-                .enabled_extension_names(extensions::instance::REQUIRED)
-                .flags(extensions::instance::FLAGS);
+                .enabled_extension_names(extensions::instance::REQUIRED);
 
             unsafe {
                 entry
                     .create_instance(&create_info, None)
-                    .map_err(InstanceError::Create)?
+                    .map_err(Error::Create)?
             }
         };
 
@@ -41,8 +40,9 @@ impl Instance {
 
 impl Drop for Instance {
     fn drop(&mut self) {
+        let Self { instance, entry: _ } = self;
         unsafe {
-            self.instance.destroy_instance(None);
+            instance.destroy_instance(None);
         }
     }
 }
@@ -55,7 +55,7 @@ impl std::ops::Deref for Instance {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum InstanceError {
+pub enum Error {
     #[error("failed to load vulkan entry-point / {0}")]
     LoadEntry(#[from] ash::LoadingError),
     #[error("failed to create vulkan instance / {0}")]

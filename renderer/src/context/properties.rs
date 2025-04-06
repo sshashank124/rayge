@@ -1,6 +1,6 @@
 use ash::vk;
 
-use super::instance::Instance;
+use super::instance;
 
 #[derive(Debug)]
 pub struct Properties {
@@ -26,7 +26,10 @@ pub struct ShaderGroupProperties {
 }
 
 impl Properties {
-    pub fn get_supported(instance: &Instance, physical_device: vk::PhysicalDevice) -> Self {
+    pub fn get_supported(
+        instance: &instance::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> Self {
         let mut ray_tracing_pipeline = vk::PhysicalDeviceRayTracingPipelinePropertiesKHR::default();
         let mut acceleration_structure =
             vk::PhysicalDeviceAccelerationStructurePropertiesKHR::default();

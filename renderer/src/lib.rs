@@ -1,36 +1,63 @@
+#![feature(adt_const_params)]
+#![feature(array_try_from_fn)]
 #![feature(let_chains)]
 
-mod context;
-mod swapchain;
-
-use std::rc::Rc;
-
-use raw_window_handle::HasWindowHandle;
-
-use context::Context;
+use context::device;
+use destroy::Destroy;
 use swapchain::Swapchain;
 
-type Ctx = Rc<Context>;
+mod base;
+mod context;
+mod destroy;
+mod swapchain;
+
+type Result<T> = core::result::Result<T, Error>;
 
 pub struct Renderer {
-    swapchain: Swapchain,
-    context: Ctx,
+    swapchain: swapchain::Swapchain,
+    ctx: context::Context,
 }
 
 impl Renderer {
-    pub fn new(window: &impl HasWindowHandle) -> Result<Self, RendererError> {
-        let context = Rc::new(Context::new(window)?);
+    pub fn new(window: &impl raw_window_handle::HasWindowHandle) -> Result<Self> {
+        let ctx = context::Context::new(window)?;
+        let swapchain = swapchain::Swapchain::new(&ctx)?;
 
-        let swapchain = Swapchain::new(&context)?;
+        Ok(Self { swapchain, ctx })
+    }
 
-        Ok(Self { swapchain, context })
+    pub fn render(&mut self) -> Result<bool> {
+        Ok(false)
+    }
+
+    pub fn resize(&mut self) -> Result<bool> {
+        let is_valid = self.ctx.refresh_surface_capabilities()?;
+        if is_valid {
+            self.ctx.wait_idle()?;
+            self.swapchain.destroy_with(&self.ctx);
+            self.swapchain = Swapchain::new(&self.ctx)?;
+        }
+        Ok(is_valid)
+    }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        use destroy::Destroy;
+
+        let Self { swapchain, ctx } = self;
+
+        ctx.wait_idle().expect("Failed to wait for device to idle");
+        swapchain.destroy_with(ctx);
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum RendererError {
+pub enum Error {
     #[error("context / {0}")]
-    Context(#[from] context::ContextError),
+    Context(#[from] context::Error),
+    #[error("device / {0}")]
+    Device(#[from] device::Error),
     #[error("swapchain / {0}")]
-    Swapchain(#[from] swapchain::SwapchainError),
+    Swapchain(#[from] swapchain::Error),
 }

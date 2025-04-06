@@ -1,39 +1,35 @@
-mod device;
+pub mod device;
 mod extensions;
 mod features;
 mod instance;
 mod physical_device;
 mod properties;
 mod queue;
-mod surface;
+pub mod surface;
 
 use raw_window_handle::HasWindowHandle;
 
-use device::Device;
-use instance::Instance;
-use physical_device::PhysicalDevice;
-use surface::Surface;
-
-type Result<T> = core::result::Result<T, ContextError>;
+type Result<T> = core::result::Result<T, Error>;
 
 pub struct Context {
-    device: Device,
-    pub surface: Surface,
-    physical_device: PhysicalDevice,
-    instance: Instance,
+    device: device::Device,
+    pub surface: surface::Surface,
+    physical_device: physical_device::PhysicalDevice,
+    instance: instance::Instance,
 }
 
 impl Context {
     pub(super) fn new(window: &impl HasWindowHandle) -> Result<Self> {
-        let instance = Instance::new()?;
+        let instance = instance::Instance::new()?;
 
         let surface_handle = surface::Handle::new(&instance, window)?;
 
-        let (physical_device, surface_config) = PhysicalDevice::new(&instance, &surface_handle)?;
+        let (physical_device, surface_config) =
+            physical_device::PhysicalDevice::new(&instance, &surface_handle)?;
 
-        let surface = Surface::new(surface_config, surface_handle);
+        let surface = surface::Surface::new(surface_config, surface_handle);
 
-        let device = Device::new(&instance, &physical_device, &surface)?;
+        let device = device::Device::new(&instance, &physical_device, &surface)?;
 
         let context = Self {
             device,
@@ -46,10 +42,14 @@ impl Context {
 
         Ok(context)
     }
+
+    pub fn refresh_surface_capabilities(&mut self) -> Result<bool> {
+        Ok(self.surface.refresh_capabilities(&self.physical_device)?)
+    }
 }
 
 impl std::ops::Deref for Context {
-    type Target = Device;
+    type Target = device::Device;
     fn deref(&self) -> &Self::Target {
         &self.device
     }
@@ -57,22 +57,28 @@ impl std::ops::Deref for Context {
 
 impl core::fmt::Debug for Context {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self {
+            device,
+            surface,
+            physical_device,
+            instance: _,
+        } = self;
         f.debug_struct("Context")
-            .field("device", &self.device)
-            .field("surface", &self.surface)
-            .field("physical_device", &self.physical_device)
+            .field("device", device)
+            .field("surface", surface)
+            .field("physical_device", physical_device)
             .finish_non_exhaustive()
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ContextError {
+pub enum Error {
     #[error("instance / {0}")]
-    Instance(#[from] instance::InstanceError),
+    Instance(#[from] instance::Error),
     #[error("physical device / {0}")]
-    PhysicalDevice(#[from] physical_device::PhysicalDeviceError),
+    PhysicalDevice(#[from] physical_device::Error),
     #[error("surface / {0}")]
-    Surface(#[from] surface::SurfaceError),
+    Surface(#[from] surface::Error),
     #[error("device / {0}")]
-    Device(#[from] device::DeviceError),
+    Device(#[from] device::Error),
 }

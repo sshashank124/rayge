@@ -1,8 +1,8 @@
 use ash::vk;
 
-use super::instance::Instance;
+use super::instance;
 
-pub fn supported_by(instance: &Instance, physical_device: vk::PhysicalDevice) -> bool {
+pub fn supported_by(instance: &instance::Instance, physical_device: vk::PhysicalDevice) -> bool {
     let mut pageable_device_local_memory =
         vk::PhysicalDevicePageableDeviceLocalMemoryFeaturesEXT::default();
     let mut memory_priority = vk::PhysicalDeviceMemoryPriorityFeaturesEXT::default();
@@ -31,7 +31,6 @@ pub fn supported_by(instance: &Instance, physical_device: vk::PhysicalDevice) ->
     && v_1_1.storage_buffer16_bit_access > 0
     && v_1_1.uniform_and_storage_buffer16_bit_access > 0
 
-    /*
     // 1.2
     && v_1_2.buffer_device_address > 0
     && v_1_2.descriptor_binding_partially_bound > 0
@@ -51,12 +50,11 @@ pub fn supported_by(instance: &Instance, physical_device: vk::PhysicalDevice) ->
     && memory_priority.memory_priority > 0
     // pageable device local memory
     && pageable_device_local_memory.pageable_device_local_memory > 0
-    */
 }
 
 pub fn required<'a>() -> (
     vk::PhysicalDeviceFeatures2<'a>,
-    [Box<dyn vk::ExtendsPhysicalDeviceFeatures2>; 1],
+    [Box<dyn vk::ExtendsPhysicalDeviceFeatures2>; 7],
 ) {
     (
         vk::PhysicalDeviceFeatures2::default().features(
@@ -70,7 +68,6 @@ pub fn required<'a>() -> (
                     .storage_buffer16_bit_access(true)
                     .uniform_and_storage_buffer16_bit_access(true),
             ),
-            /*
             Box::new(
                 vk::PhysicalDeviceVulkan12Features::default()
                     .buffer_device_address(true)
@@ -100,7 +97,6 @@ pub fn required<'a>() -> (
                 vk::PhysicalDevicePageableDeviceLocalMemoryFeaturesEXT::default()
                     .pageable_device_local_memory(true),
             ),
-            */
         ],
     )
 }

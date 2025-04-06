@@ -3,17 +3,13 @@ use std::mem::ManuallyDrop;
 use ash::vk;
 
 use super::{
-    extensions, features,
-    instance::{self, Instance},
-    physical_device::PhysicalDevice,
-    queue::{QueueError, Queues},
-    surface::Surface,
+    extensions, features, instance, physical_device::PhysicalDevice, queue, surface::Surface,
 };
 
-type Result<T> = core::result::Result<T, DeviceError>;
+type Result<T> = core::result::Result<T, Error>;
 
 pub struct Device {
-    queues: Queues,
+    queues: queue::Queues,
     pub ext: extensions::Handles,
     allocator: ManuallyDrop<vk_mem::Allocator>,
     handle: ash::Device,
@@ -21,12 +17,12 @@ pub struct Device {
 
 impl Device {
     pub fn new(
-        instance: &Instance,
+        instance: &instance::Instance,
         physical_device: &PhysicalDevice,
         surface: &Surface,
     ) -> Result<Self> {
         let (queue_create_infos, queue_families) =
-            Queues::create_infos(instance, physical_device, surface)?;
+            queue::Queues::create_infos(instance, physical_device, surface)?;
 
         let handle = {
             let (required_features, mut additional_required_features) = features::required();
@@ -49,7 +45,7 @@ impl Device {
             unsafe {
                 instance
                     .create_device(**physical_device, &create_info, None)
-                    .map_err(DeviceError::Create)?
+                    .map_err(Error::Create)?
             }
         };
 
@@ -63,13 +59,13 @@ impl Device {
                 | vk_mem::AllocatorCreateFlags::EXT_MEMORY_PRIORITY;
 
             ManuallyDrop::new(unsafe {
-                vk_mem::Allocator::new(create_info).map_err(DeviceError::Allocator)
+                vk_mem::Allocator::new(create_info).map_err(Error::Allocator)
             }?)
         };
 
         let ext = extensions::Handles::new(instance, &handle);
 
-        let queues = Queues::new(&handle, &queue_families);
+        let queues = queue::Queues::new(&handle, &queue_families);
 
         Ok(Self {
             queues,
@@ -78,31 +74,78 @@ impl Device {
             handle,
         })
     }
+
+    #[cfg(feature = "debug-names")]
+    pub fn set_debug_name<H: vk::Handle>(&self, object: H, name: &str) -> Result<()> {
+        let object_name = std::ffi::CString::new(name).unwrap();
+        let name_info = vk::DebugUtilsObjectNameInfoEXT::default()
+            .object_handle(object)
+            .object_name(&object_name);
+
+        unsafe {
+            self.ext
+                .debug_utils
+                .set_debug_utils_object_name(&name_info)
+                .map_err(Error::SetDebugName)
+        }
+    }
+
+    #[cfg(not(feature = "debug-names"))]
+    pub fn set_debug_name<H>(&self, _: H, _: &str) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn wait_idle(&self) -> Result<()> {
+        unsafe { self.device_wait_idle().map_err(Error::WaitIdle) }
+    }
+}
+
+impl std::ops::Deref for Device {
+    type Target = ash::Device;
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
 }
 
 impl Drop for Device {
     fn drop(&mut self) {
+        let Self {
+            queues: _,
+            ext: _,
+            allocator,
+            handle,
+        } = self;
         unsafe {
-            ManuallyDrop::drop(&mut self.allocator);
-            self.handle.destroy_device(None);
+            ManuallyDrop::drop(allocator);
+            handle.destroy_device(None);
         }
     }
 }
 
 impl core::fmt::Debug for Device {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self {
+            queues,
+            ext: _,
+            allocator: _,
+            handle: _,
+        } = self;
         f.debug_struct("Device")
-            .field("queues", &self.queues)
+            .field("queues", queues)
             .finish_non_exhaustive()
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum DeviceError {
+pub enum Error {
     #[error("failed to create device / {0}")]
     Create(vk::Result),
     #[error("queue / {0}")]
-    Queue(#[from] QueueError),
+    Queue(#[from] queue::Error),
     #[error("allocator / {0}")]
     Allocator(vk::Result),
+    #[error("failed to set debug name / {0}")]
+    SetDebugName(vk::Result),
+    #[error("failed to wait for device to idle / {0}")]
+    WaitIdle(vk::Result),
 }

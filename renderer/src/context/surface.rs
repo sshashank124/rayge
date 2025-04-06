@@ -1,21 +1,21 @@
-use ash::{ext, khr, vk};
+use ash::{khr, vk};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use raw_window_metal::Layer;
 
 use super::{instance::Instance, physical_device::PhysicalDevice};
 
-mod conf {
+pub mod conf {
     use ash::vk;
 
-    pub const PREFERRED_SURFACE_FORMAT: vk::SurfaceFormatKHR = vk::SurfaceFormatKHR {
+    pub const FORMAT: vk::SurfaceFormatKHR = vk::SurfaceFormatKHR {
         format: vk::Format::B8G8R8A8_SRGB,
         color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
     };
     pub const PREFERRED_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO_RELAXED;
     pub const FALLBACK_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO;
+    pub const PREFERRED_IMAGE_COUNT: u32 = 3;
 }
 
-type Result<T> = core::result::Result<T, SurfaceError>;
+type Result<T> = core::result::Result<T, Error>;
 
 pub struct Surface {
     pub config: Config,
@@ -24,7 +24,6 @@ pub struct Surface {
 
 #[derive(Debug)]
 pub struct Config {
-    pub surface_format: vk::SurfaceFormatKHR,
     pub present_mode: vk::PresentModeKHR,
     pub extent: vk::Extent2D,
     pub image_count: u32,
@@ -38,6 +37,19 @@ pub struct Handle {
 impl Surface {
     pub const fn new(config: Config, handle: Handle) -> Self {
         Self { config, handle }
+    }
+
+    pub fn refresh_capabilities(&mut self, physical_device: &PhysicalDevice) -> Result<bool> {
+        Ok(self
+            .config
+            .update_with(&self.get_capabilities(**physical_device)?))
+    }
+}
+
+impl Config {
+    fn update_with(&mut self, capabilities: &vk::SurfaceCapabilitiesKHR) -> bool {
+        self.extent = Handle::choose_extent(capabilities);
+        self.extent.width != 0 && self.extent.height != 0
     }
 }
 
@@ -54,32 +66,26 @@ impl Handle {
         let surface_formats = unsafe {
             self.loader
                 .get_physical_device_surface_formats(physical_device, self.surface)
-                .map_err(SurfaceError::GetConfigOptions)?
+                .map_err(Error::GetConfigOptions)?
         };
 
         let present_modes = unsafe {
             self.loader
                 .get_physical_device_surface_present_modes(physical_device, self.surface)
-                .map_err(SurfaceError::GetConfigOptions)?
+                .map_err(Error::GetConfigOptions)?
         };
 
-        Ok(
-            if !surface_formats.is_empty() && !present_modes.is_empty() {
-                let surface_format = Self::choose_best_surface_format(&surface_formats);
-                let extent = Self::choose_extent(&capabilities);
-                let image_count = Self::choose_image_count(&capabilities);
-                let present_mode = Self::choose_best_present_mode(&present_modes);
+        Ok(Self::choose_best_surface_format(&surface_formats).map(|_| {
+            let extent = Self::choose_extent(&capabilities);
+            let image_count = Self::choose_image_count(&capabilities);
+            let present_mode = Self::choose_best_present_mode(&present_modes);
 
-                Some(Config {
-                    surface_format,
-                    present_mode,
-                    extent,
-                    image_count,
-                })
-            } else {
-                None
-            },
-        )
+            Config {
+                present_mode,
+                extent,
+                image_count,
+            }
+        }))
     }
 
     fn get_capabilities(
@@ -89,16 +95,14 @@ impl Handle {
         unsafe {
             self.loader
                 .get_physical_device_surface_capabilities(physical_device, self.surface)
-                .map_err(SurfaceError::GetConfigOptions)
+                .map_err(Error::GetConfigOptions)
         }
     }
 
-    fn choose_best_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
-        if formats.contains(&conf::PREFERRED_SURFACE_FORMAT) {
-            conf::PREFERRED_SURFACE_FORMAT
-        } else {
-            formats[0]
-        }
+    fn choose_best_surface_format(
+        formats: &[vk::SurfaceFormatKHR],
+    ) -> Option<vk::SurfaceFormatKHR> {
+        formats.iter().copied().find(|f| *f == conf::FORMAT)
     }
 
     fn choose_best_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
@@ -126,12 +130,17 @@ impl Handle {
         }
     }
 
-    fn choose_image_count(capabilities: &vk::SurfaceCapabilitiesKHR) -> u32 {
-        let image_count = capabilities.min_image_count + 1;
-        if capabilities.max_image_count > 0 {
-            image_count.min(capabilities.max_image_count)
+    fn choose_image_count(
+        vk::SurfaceCapabilitiesKHR {
+            min_image_count,
+            max_image_count,
+            ..
+        }: &vk::SurfaceCapabilitiesKHR,
+    ) -> u32 {
+        if *max_image_count < *min_image_count {
+            conf::PREFERRED_IMAGE_COUNT.max(*min_image_count)
         } else {
-            image_count
+            conf::PREFERRED_IMAGE_COUNT.clamp(*min_image_count, *max_image_count)
         }
     }
 
@@ -147,7 +156,7 @@ impl Handle {
                     queue_family_index,
                     self.surface,
                 )
-                .map_err(SurfaceError::GetConfigOptions)
+                .map_err(Error::GetConfigOptions)
         }
     }
 }
@@ -161,20 +170,10 @@ fn create_surface(instance: &Instance, window: &impl HasWindowHandle) -> Result<
             unsafe {
                 khr::win32_surface::Instance::new(&instance.entry, instance)
                     .create_win32_surface(&create_info, None)
-                    .map_err(SurfaceError::Create)
+                    .map_err(Error::Create)
             }
         }
-        RawWindowHandle::AppKit(handle) => {
-            let layer = unsafe { Layer::from_ns_view(handle.ns_view) };
-            let create_info =
-                vk::MetalSurfaceCreateInfoEXT::default().layer(layer.as_ptr().as_ptr());
-            unsafe {
-                ext::metal_surface::Instance::new(&instance.entry, instance)
-                    .create_metal_surface(&create_info, None)
-                    .map_err(SurfaceError::Create)
-            }
-        }
-        _ => Err(SurfaceError::UnsupportedPlatform),
+        _ => Err(Error::UnsupportedPlatform),
     }
 }
 
@@ -194,22 +193,24 @@ impl std::ops::Deref for Handle {
 
 impl Drop for Handle {
     fn drop(&mut self) {
+        let Self { surface, loader } = self;
         unsafe {
-            self.loader.destroy_surface(self.surface, None);
+            loader.destroy_surface(*surface, None);
         }
     }
 }
 
 impl core::fmt::Debug for Surface {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self { config, handle: _ } = self;
         f.debug_struct("Surface")
-            .field("config", &self.config)
+            .field("config", config)
             .finish_non_exhaustive()
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum SurfaceError {
+pub enum Error {
     #[error("failed to get window handle / {0}")]
     GetHandle(#[from] raw_window_handle::HandleError),
     #[error("failed to create window surface / {0}")]

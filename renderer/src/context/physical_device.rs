@@ -2,7 +2,7 @@ use ash::vk;
 
 use super::{extensions, features, instance::Instance, properties::Properties, surface};
 
-type Result<T> = core::result::Result<T, PhysicalDeviceError>;
+type Result<T> = core::result::Result<T, Error>;
 
 pub struct PhysicalDevice {
     properties: Properties,
@@ -11,8 +11,8 @@ pub struct PhysicalDevice {
 
 impl PhysicalDevice {
     pub fn new(instance: &Instance, surface: &surface::Handle) -> Result<(Self, surface::Config)> {
-        let possible_physical_devices = unsafe { instance.enumerate_physical_devices() }
-            .map_err(PhysicalDeviceError::Enumerate)?;
+        let possible_physical_devices =
+            unsafe { instance.enumerate_physical_devices() }.map_err(Error::Enumerate)?;
 
         for physical_device in possible_physical_devices {
             if let Some(result) = Self::try_create(instance, physical_device, surface)? {
@@ -20,7 +20,7 @@ impl PhysicalDevice {
             }
         }
 
-        Err(PhysicalDeviceError::NoSuitableCandidate)
+        Err(Error::NoSuitableCandidate)
     }
 
     fn try_create(
@@ -54,20 +54,24 @@ impl std::ops::Deref for PhysicalDevice {
 
 impl core::fmt::Debug for PhysicalDevice {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self {
+            properties,
+            handle: _,
+        } = self;
         f.debug_struct("PhysicalDevice")
-            .field("properties", &self.properties)
+            .field("properties", properties)
             .finish_non_exhaustive()
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum PhysicalDeviceError {
+pub enum Error {
     #[error("failed to enumerate physical devices / {0}")]
     Enumerate(vk::Result),
     #[error("device extensions / {0}")]
-    DeviceExtensions(#[from] extensions::device::DeviceExtensionsError),
+    DeviceExtensions(#[from] extensions::device::Error),
     #[error("surface / {0}")]
-    Surface(#[from] surface::SurfaceError),
+    Surface(#[from] surface::Error),
     #[error("no suitable physical device found")]
     NoSuitableCandidate,
 }

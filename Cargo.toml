@@ -9,7 +9,7 @@ authors = ["Shashank Singh <sshashank124@gmail.com>"]
 repository = "https://github.com/sshashank124/rayge"
 
 [workspace.dependencies]
-renderer = { path = "renderer" }
+renderer = { path = "renderer", features = ["debug-names"] }
 thiserror = "2"
 tracing = "0.1"
 
